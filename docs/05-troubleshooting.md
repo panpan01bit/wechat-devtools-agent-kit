@@ -34,6 +34,26 @@
 | a11y 点击报 frame stale | 界面在 observe 之后变了 | 重新 observe 拿新 state_id 再 act；不要按旧坐标盲试 |
 | 命令行没装 automator | 项目 node_modules 没有 | `cd tools && npm i miniprogram-automator`；tools/ 进 packOptions.ignore |
 
+## Mimosa 安全钩子（git commit 被拦截时）
+
+git-gate 钩子对整个工作区跑深度扫描，**high 强制拦截 commit，medium 只附提示不拦截**。
+判定与 `security_scan`（deep 档）结果完全同源：改完代码先重扫，high 清零再提交。
+
+实战验证过的规律（2026-09 真实案例：65 发现 → 0 high）：
+
+| 规则（触发） | 修法（验证可过） |
+|---|---|
+| Python `open(path, "w"/"wb")` 一律记 path-traversal high——路径是变量/常量表达式/相对字面量都一样，前置 resolve+parents 校验、safe_path 包装都**不**被识别 | 改用 `tempfile.mkstemp(dir=父目录) + os.fdopen(fd) + os.replace` 原子写；fdopen 接收的是 fd 不是路径，sink 不命中（投资工具项目全库此写法，零发现） |
+| JS `fetch()` 被 Python 侧同名函数污染：项目里有 `def fetch(url)`（requests.get）时，**全项目所有 JS fetch** 被跨文件串成 ssrf high | Python 侧改名（`fetch` → `get_html`），同名污染立刻消失 |
+| 污点参数（location.hash、`sys.argv`）流入"含 fetch 的函数"或"写路径"→ 该函数被记 `xxx 是 ssrf/path-traversal 入口` high；switch 分支返回字面量、regex 校验、encodeURIComponent **都**不被认可为消毒 | 让污染值彻底碰不到 sink：fetch 参数只用字面量数组遍历（`["a","b"].map(n => fetch(PREFIX + n + ".json"))` 是认可模式），污染值只做缓存索引；CLI 参数直接删掉用常量 |
+| `os.replace/mkdir` 也是传播节点 | 同上，源头消毒 |
+
+排障循环：改码 → `security_scan` deep 重扫 → 看 high 是否清零 → 再 commit。
+失败重扫很快（秒级），不要凭感觉猜规则，每次改动都重扫验证。
+
+注：medium 里的「xss 入口」多为 innerHTML + 已 esc() 的误报形态，不拦截；
+「不安全的随机数」low 与 sec-random 用 `secrets`/`crypto.getRandomValues` 即消。
+
 ## 流程提醒
 
 - **部署 ≠ 生效感知**：云函数部署是即时的，但用户/体验版打没打到新版本要靠调用验证（automator 跑一次），
