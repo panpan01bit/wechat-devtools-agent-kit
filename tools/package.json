@@ -1,0 +1,9 @@
+{
+  "name": "wechat-devtools-agent-kit-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "automator 连接封装与复现脚本（放小程序项目 tools/ 下使用；记得把 tools 加进 packOptions.ignore）",
+  "dependencies": {
+    "miniprogram-automator": "^0.12.1"
+  }
+}
